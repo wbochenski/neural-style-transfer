@@ -10,10 +10,8 @@ class FeatureExtractor(nn.Module):
         self.model = self._build_model()
 
     def forward(self, x: Tensor) -> dict[str, Tensor]:
-        """Run a forward pass and return collected intermediate features"""
         self.features.clear()
         _ = self.model(x)
-
         return self.features
 
     def _get_hook(self, name: str):
@@ -22,17 +20,21 @@ class FeatureExtractor(nn.Module):
         return hook
 
     def _build_model(self) -> nn.Sequential:
+        """Load and setup the pretrained VGG19 model"""
         model = vgg19(weights=VGG19_Weights.IMAGENET1K_V1).features
 
+        # Replace max pooling layers with average pooling layers
         for idx, layer in enumerate(model):
             if isinstance(layer, nn.MaxPool2d):
                 model[idx] = nn.AvgPool2d(kernel_size=2, stride=2, padding=0)
 
+        # Register hooks to collect intermediate features
+        for layer_idx, layer_name in config.layer_map.items():
+            model[layer_idx].register_forward_hook(self._get_hook(layer_name))
+
+        # Freeze the model parameters and set to evaluation mode
         model.requires_grad_(False)
         model.to(config.device)
         model.eval()
-
-        for layer_idx, layer_name in config.layer_map.items():
-            model[layer_idx].register_forward_hook(self._get_hook(layer_name))
 
         return model
