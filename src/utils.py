@@ -4,9 +4,8 @@ from PIL import Image
 import torch
 
 
-def load_image(path: Path, max_size: int = None) -> torch.Tensor:
+def load_image(image: Image, max_size: int = None) -> torch.Tensor:
     """Load an image from the given path and convert it to a normalized tensor."""
-    image = Image.open(path).convert('RGB')
 
     # Resize keeping the aspect ratio the same
     if max_size is not None:
