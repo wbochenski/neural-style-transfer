@@ -12,7 +12,7 @@ class FeatureExtractor(nn.Module):
     def forward(self, x: Tensor) -> dict[str, Tensor]:
         self.features.clear()
         _ = self.model(x)
-        return self.features
+        return self.features.copy()
 
     def _get_hook(self, name: str):
         def hook(_module, _input, output):
