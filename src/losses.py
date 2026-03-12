@@ -4,14 +4,14 @@ import torch.nn as nn
 
 
 class ContentLoss(nn.Module):
-    def __init__(self):
+    def __init__(self, target_features):
         super(ContentLoss, self).__init__()
+        self.target_layer = target_features[config.content_layer].detach()
     
-    def forward(self, target_features, prediction_features, layer):
-        target_layer = target_features[layer].detach()
-        prediction_layer = prediction_features[layer]
-        return 0.5 * torch.sum((prediction_layer - target_layer) ** 2)
-
+    def forward(self, prediction_features):
+        prediction_layer = prediction_features[config.content_layer]
+        return nn.functional.mse_loss(prediction_layer, self.target_layer)
+    
 
 class StyleLoss(nn.Module):
     def __init__(self, target_features):
