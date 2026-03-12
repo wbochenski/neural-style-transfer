@@ -19,3 +19,6 @@ layer_map = {
     33: "conv5_3",
     35: "conv5_4",
 }
+
+content_layer = "conv5_2"
+style_layers = ["conv1_1", "conv2_1", "conv3_1", "conv4_1", "conv5_1"]
