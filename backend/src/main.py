@@ -83,6 +83,7 @@ def decode_image(tensor: torch.Tensor) -> Image.Image:
 
 @app.get("/health")
 def health_check():
+    logger.debug("Health check called")
     return {"status": "ok"}
 
 
@@ -94,10 +95,18 @@ class ImagePayload(BaseModel):
 @app.post("/style-transfer")
 def style_transfer(payload: ImagePayload):
     size = 512
-    steps = 300
+    steps = 1
     content_layer = "conv4_2"
     style_layers = ["conv1_1", "conv2_1", "conv3_1", "conv4_1", "conv5_1"]
     alpha_beta_ratio = 10e-3
+
+    content_size = len(payload.content_img)
+    style_size = len(payload.style_img)
+    logger.info(
+        f"Style transfer requested — content: {content_size / 1024:.1f}KB, "
+        f"style: {style_size / 1024:.1f}KB, "
+        f"steps: {steps}, size: {size}"
+    )
 
     device = torch.device(
         "cuda"
@@ -106,6 +115,7 @@ def style_transfer(payload: ImagePayload):
         if torch.mps.is_available()
         else "cpu"
     )
+    logger.info(f"Using device: {device}")
 
     mean = torch.tensor([0.485, 0.456, 0.406]).to(device)
     std = torch.tensor([0.229, 0.224, 0.225]).to(device)
@@ -118,6 +128,7 @@ def style_transfer(payload: ImagePayload):
     content_img.thumbnail([size, size])
     style_img = Image.open(BytesIO(base64.b64decode(payload.style_img))).convert("RGB")
     style_img.thumbnail([size, size])
+    logger.debug(f"Decoded images — content: {content_img.size}, style: {style_img.size}")
 
     content_tensor = (
         load_image(content_img).to(device).contiguous().requires_grad_(False)
@@ -127,6 +138,7 @@ def style_transfer(payload: ImagePayload):
 
     content_features = extractor(content_tensor)
     style_features = extractor(style_tensor)
+    logger.debug("Features extracted from content and style images")
 
     total_loss = TotalLoss(
         content_features,
@@ -139,6 +151,8 @@ def style_transfer(payload: ImagePayload):
     lo = (0 - mean.view(3, 1, 1)) / std.view(3, 1, 1)
     hi = (1 - mean.view(3, 1, 1)) / std.view(3, 1, 1)
 
+    logger.info(f"Starting optimization — {steps} steps")
+
     def closure():
         optimizer.zero_grad()
         pred_features = extractor(pred_tensor)
@@ -146,12 +160,19 @@ def style_transfer(payload: ImagePayload):
         loss.backward()
         return loss
 
-    for _ in range(steps):
+    for i in range(steps):
         optimizer.step(closure)
         with torch.no_grad():
             pred_tensor.clamp_(lo, hi)
+        
+        logger.info(f"Optimization step {i + 1}/{steps}")
 
-    return {"image": decode_image(pred_tensor)}
+    result = decode_image(pred_tensor)
+    logger.info(
+        f"Style transfer complete — output: {len(result) / 1024:.1f}KB"
+    )
+
+    return {"image": result}
 
 
 if __name__ == "__main__":
