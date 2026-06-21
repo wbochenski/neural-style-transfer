@@ -156,4 +156,4 @@ def style_transfer(payload: ImagePayload):
 
 if __name__ == "__main__":
     logger.info("API is up!")
-    uvicorn.run("src.main:app", host="0.0.0.0", port=8000)
+    uvicorn.run("main:app", host="0.0.0.0", port=8000)
