@@ -680,40 +680,31 @@ export default function StyleTransfer() {
     const t0 = Date.now();
 
     try {
-      const resp = await fetch("http://localhost:3000/stylize", {
+      const stripPrefix = (dataUrl) => {
+        const idx = dataUrl.indexOf(",");
+        return idx !== -1 ? dataUrl.substring(idx + 1) : dataUrl;
+      };
+
+      const resp = await fetch("/api/style-transfer", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          content: content.src,
-          style: styleImg.src,
+          content_img: stripPrefix(content.src),
+          style_img: stripPrefix(styleImg.src),
         }),
       });
 
       if (!resp.ok) throw new Error(`Server returned ${resp.status}: ${resp.statusText}`);
 
-      // Try to parse as JSON first, then fall back to blob
-      const ct = resp.headers.get("Content-Type") || "";
-      let imgSrc;
-
-      if (ct.includes("application/json")) {
-        const json = await resp.json();
-        // Accept { image: "data:..." } or { result: "..." } or { output: "..." }
-        imgSrc = json.image || json.result || json.output || json.stylized;
-        if (!imgSrc) throw new Error("Could not find image field in JSON response");
-      } else {
-        // Assume image blob
-        const blob = await resp.blob();
-        imgSrc = await new Promise((res) => {
-          const r = new FileReader();
-          r.onload = () => res(r.result);
-          r.readAsDataURL(blob);
-        });
-      }
+      const json = await resp.json();
+      const raw = json.image;
+      if (!raw) throw new Error("Could not find image field in JSON response");
+      const imgSrc = `data:image/png;base64,${raw}`;
 
       setElapsed(((Date.now() - t0) / 1000).toFixed(1));
       setResult(imgSrc);
     } catch (err) {
-      setError(err.message || "Unknown error — is localhost:3000 running?");
+      setError(err.message || "Unknown error — is the backend running?");
     } finally {
       setLoading(false);
     }
