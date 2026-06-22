@@ -351,6 +351,21 @@ const style = `
     background: #f87171;
     animation: none;
   }
+  .progress-track {
+    width: 100%;
+    height: 6px;
+    background: var(--bg3);
+    border-radius: 3px;
+    overflow: hidden;
+    margin-top: 2px;
+  }
+  .progress-fill {
+    height: 100%;
+    background: var(--amber);
+    border-radius: 3px;
+    transition: width 0.3s ease;
+  }
+
   @keyframes pulse {
     0%, 100% { opacity: 1; transform: scale(1); }
     50% { opacity: 0.4; transform: scale(0.7); }
@@ -669,6 +684,7 @@ export default function StyleTransfer() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [elapsed, setElapsed] = useState(null);
+  const [progress, setProgress] = useState(0);
 
   const canRun = content && styleImg && !loading;
 
@@ -677,6 +693,7 @@ export default function StyleTransfer() {
     setLoading(true);
     setError(null);
     setResult(null);
+    setProgress(0);
     const t0 = Date.now();
 
     try {
@@ -685,7 +702,7 @@ export default function StyleTransfer() {
         return idx !== -1 ? dataUrl.substring(idx + 1) : dataUrl;
       };
 
-      const resp = await fetch("/api/style-transfer", {
+      const postResp = await fetch("/api/style-transfer", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -694,15 +711,31 @@ export default function StyleTransfer() {
         }),
       });
 
-      if (!resp.ok) throw new Error(`Server returned ${resp.status}: ${resp.statusText}`);
+      if (!postResp.ok) throw new Error(`Server returned ${postResp.status}: ${postResp.statusText}`);
 
-      const json = await resp.json();
-      const raw = json.image;
-      if (!raw) throw new Error("Could not find image field in JSON response");
-      const imgSrc = `data:image/png;base64,${raw}`;
+      const { job_id } = await postResp.json();
+      if (!job_id) throw new Error("No job ID returned");
 
-      setElapsed(((Date.now() - t0) / 1000).toFixed(1));
-      setResult(imgSrc);
+      while (true) {
+        const pollResp = await fetch(`/api/style-transfer/${job_id}`);
+        if (!pollResp.ok) throw new Error(`Poll returned ${pollResp.status}`);
+
+        const data = await pollResp.json();
+
+        if (data.status === "completed") {
+          setResult(`data:image/png;base64,${data.image}`);
+          setElapsed(((Date.now() - t0) / 1000).toFixed(1));
+          break;
+        }
+        if (data.status === "failed") {
+          throw new Error(data.error || "Style transfer failed");
+        }
+        if (data.status === "running" || data.status === "pending") {
+          setProgress(data.progress || 0);
+        }
+
+        await new Promise((r) => setTimeout(r, 1000));
+      }
     } catch (err) {
       setError(err.message || "Unknown error — is the backend running?");
     } finally {
@@ -756,9 +789,14 @@ export default function StyleTransfer() {
           )}
 
           {loading && (
-            <div className="status-bar">
-              <div className="status-dot" />
-              Transferring style… this may take a moment
+            <div className="status-bar" style={{ flexDirection: "column", gap: "6px", padding: "12px 16px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px", width: "100%" }}>
+                <div className="status-dot" />
+                Transferring style… {progress}%
+              </div>
+              <div className="progress-track">
+                <div className="progress-fill" style={{ width: `${progress}%` }} />
+              </div>
             </div>
           )}
 
@@ -776,7 +814,7 @@ export default function StyleTransfer() {
               {content && !styleImg && <>Now upload a <strong>style</strong> image</>}
               {!content && styleImg && <>Now upload a <strong>content</strong> image</>}
               {content && styleImg && !loading && <>Ready — click to transfer style to your image</>}
-              {loading && <>Calling <strong>localhost:3000/stylize</strong></>}
+              {loading && <>{progress}% complete — <strong>{progress < 100 ? "working" : "finalizing"}</strong></>}
             </div>
           </div>
 
